@@ -1,0 +1,40 @@
+# # Failing a build that has warnings and a list of warnings to activate
+# https://users.rust-lang.org/t/how-to-fail-a-build-with-warnings/2687/8
+# https://github.com/rust-unofficial/patterns/blob/master/anti_patterns/deny-warnings.md
+
+[build]
+rustflags = [
+  "--warn", "missing-copy-implementations",
+  "--warn", "missing-debug-implementations",
+#  "--warn", "missing-docs",
+  "--warn", "unused-extern-crates",
+  "--warn", "trivial-casts",
+  "--warn", "trivial-numeric-casts",
+  "--warn", "unused-extern-crates",
+  "--warn", "unused-import-braces",
+  "--warn", "unused-qualifications",
+  "--warn", "unused-results",
+  "--deny", "const-err",
+  "--deny", "dead-code",
+  "--deny", "extra-requirement-in-impl",
+  "--deny", "improper-ctypes",
+  "--deny", "legacy-directory-ownership",
+  "--deny", "non-shorthand-field-patterns",
+  "--deny", "no-mangle-generic-items",
+  "--deny", "overflowing-literals",
+  "--deny", "path-statements",
+  "--deny", "patterns-in-fns-without-body",
+  "--deny", "plugin-as-library",
+  "--deny", "private-in-public",
+  "--deny", "private-no-mangle-fns",
+  "--deny", "private-no-mangle-statics",
+#  "--deny", "raw-pointer-derive",
+  "--deny", "safe-extern-statics",
+  "--deny", "unconditional-recursion",
+  "--deny", "unions-with-drop-fields",
+  "--deny", "unused",
+  "--deny", "unused-allocation",
+  "--deny", "unused-comparisons",
+  "--deny", "unused-parens",
+  "--deny", "while-true"
+]

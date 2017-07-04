@@ -1,0 +1,7 @@
+[package]
+name = "pianoterm-rs"
+version = "0.1.0"
+authors = ["Samuel DA MOTA <da.mota.sam@gmail.com>"]
+
+[dependencies]
+clap = "2"
