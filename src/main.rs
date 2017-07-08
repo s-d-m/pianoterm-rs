@@ -1,6 +1,7 @@
 extern crate clap;
 
 mod ports_printer;
+mod midi_reader;
 
 fn main() {
     let input_midi_port_option_name = "input port";
@@ -42,4 +43,15 @@ fn main() {
         return;
     }
 
+    match options.value_of(input_midi_file_option_name) {
+        Some(filename) => {
+            match midi_reader::get_midi_events(filename) {
+                Ok(events) => println!("got {} midi events from file {}", events.len(), filename),
+                Err(e) => println!("Error occured: {}", e),
+            }
+        }
+        None => {
+            println!("listening to input port for midi events");
+        }
+    }
 }
