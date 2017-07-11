@@ -62,6 +62,52 @@ fn read_nb_tracks(mut file: &mut std::fs::File, filename: &str) -> Result<u16, S
     }
 }
 
+enum TempoStyle {
+    MetricalTiming,
+    Timecode,
+}
+
+fn get_tickdiv(mut file: &mut std::fs::File, filename: &str) -> Result<(u16, TempoStyle), String>
+{
+    // http://midi.mathewvp.com/aboutMidi.htm
+
+    // The last two bytes indicate how many Pulses (i.e. clocks) Per Quarter Note
+    // (abbreviated as PPQN) resolution the time-stamps are based upon,
+    // Division. For example, if your sequencer has 96 ppqn, this field would be
+    // (in hex): 00 60 Alternately, if the first byte of Division is negative,
+    // then this represents the division of a second that the time-stamps are
+    // based upon. The first byte will be -24, -25, -29, or -30, corresponding to
+    // the 4 SMPTE standards representing frames per second. The second byte (a
+    // positive number) is the resolution within a frame (ie, subframe). Typical
+    // values may be 4 (MIDI Time Code), 8, 10, 80 (SMPTE bit resolution), or 100.
+    // You can specify millisecond-based timing by the data bytes of -25 and 40
+    // subframes.
+    let mut bytes : [u8; 2] = [0; 2];
+
+    if let Err(e) = file.read_exact(&mut bytes) {
+        return Err(format!("Failed to read data from file {}: {}", filename, e.description()));
+    }
+
+    if (bytes[0] as i8) >= 0
+        {
+            let tickdiv : u16 = ((bytes[0] as u16 ) << 8) | (bytes[1] as u16);
+            return Ok((tickdiv, TempoStyle::MetricalTiming));
+        }
+        else
+        {
+            let frames_per_sec : u8 = (-(bytes[0] as i8)) as u8;
+            match frames_per_sec {
+                24 | 25 | 29 | 30 => {
+                    let resolution : u8 = bytes[1];
+                    let res : u16 = resolution as u16 * frames_per_sec as u16;
+                    Ok((res, TempoStyle::Timecode))
+                },
+                _ => Err("Error: midi file contain an invalid number of frames per second".to_owned())
+            }
+        }
+
+}
+
 pub fn get_midi_events(filename: &str) -> Result<Vec<MidiEvent>, String>
 {
     let mut file = match std::fs::File::open(filename) {
@@ -111,6 +157,10 @@ pub fn get_midi_events(filename: &str) -> Result<Vec<MidiEvent>, String>
         return Err(format!("Midi file {} is supposed to be a single track one but it says it contains {} tracks", filename, nb_tracks));
     }
 
+    let (tickdiv, _ /*timing_type*/) = get_tickdiv(&mut file, filename)?;
+    if tickdiv == 0 {
+        return Err("Error: a quarter note is made of 0 pulses (which is impossible) according to the midi data".to_owned());
+    }
 
     return Ok(Vec::new());
 }
