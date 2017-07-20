@@ -2,6 +2,7 @@ extern crate clap;
 
 mod ports_printer;
 mod midi_reader;
+mod keyboard_events_extractor;
 
 fn main() {
     let input_midi_port_option_name = "input port";
@@ -46,7 +47,12 @@ fn main() {
     match options.value_of(input_midi_file_option_name) {
         Some(filename) => {
             match midi_reader::get_midi_events(filename) {
-                Ok(events) => println!("got {} midi events from file {}", events.len(), filename),
+                Ok(events) => {
+                    match keyboard_events_extractor::get_key_events(events) {
+                        Ok(events) => println!("extracted {} keyboard events", events.len()),
+                        Err(e) => println!("Error occured: {}", e),
+                    };
+                },
                 Err(e) => println!("Error occured: {}", e),
             }
         }

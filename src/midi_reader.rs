@@ -143,7 +143,7 @@ fn get_variable_length_array(mut file: &mut std::fs::File) -> Result<Vec<u8>, St
 fn get_variable_length_value(vec: &[u8]) -> Result<u64, String>
 {
     if vec.len() > 8 {
-        return Err("buffer is too big to extract a variable length value".to_owned());
+        return Err("buffer is too big to extract a variable length value from".to_owned());
     }
 
     let mut res : u64 = 0;
@@ -174,6 +174,28 @@ fn get_relative_time(mut file: &mut std::fs::File) -> Result<u32, String>
 pub struct MidiEvent {
    pub time: u64,
    pub data: Vec<u8>,
+}
+
+impl MidiEvent {
+
+    pub fn is_key_pressed(&self) -> bool
+    {
+        return (self.data.len() == 3) && ((self.data[0] & 0xF0) == 0x90) && (self.data[2] != 0x00);
+    }
+
+    pub fn is_key_released(&self) -> bool
+    {
+        return (self.data.len() == 3) &&
+            ((self.data[0] & 0xF0 == 0x80) || (((self.data[0] & 0xF0) == 0x90) && (self.data[2] == 0x00)));
+    }
+
+    pub fn get_pitch(&self) -> Option<u8>
+    {
+        match self.data.len() {
+            x if x >= 2 => Some(self.data[1]),
+            _ => None
+        }
+    }
 }
 
 // return the next byte of the file without extracting it.
@@ -360,7 +382,7 @@ fn set_real_timings(mut events : &mut [MidiEvent], tickdiv: u16, timing_style : 
     // pre condition, events must be sorted!
     for i in 1..events.len() {
         if events[i].time < events[ i - 1].time {
-            return Err("events must be sorted by time!".to_owned());
+            panic!("events must be sorted by time!".to_owned());
         }
     }
 
