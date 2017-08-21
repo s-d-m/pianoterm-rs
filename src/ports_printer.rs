@@ -7,11 +7,13 @@ pub fn print_inputs() {
     // listing input midi ports
     let input = midir::MidiInput::new("");
     match input {
-        Err(e) => { println!("Failed to list input ports: {}", e) }
+        Err(e) => println!("Failed to list input ports: {}", e),
         Ok(input) => {
             let nb_ports = input.port_count();
             match nb_ports {
-                0 => { println!("Sorry: no input midi port found"); }
+                0 => {
+                    println!("Sorry: no input midi port found");
+                }
                 1 => {
                     println!("! input port found:");
                     let name_res = input.port_name(0);
@@ -39,11 +41,13 @@ pub fn print_outputs() {
     // listing output midi ports
     let output = midir::MidiOutput::new("");
     match output {
-        Err(e) => { println!("Failed to list output ports: {}", e) }
+        Err(e) => println!("Failed to list output ports: {}", e),
         Ok(output) => {
             let nb_ports = output.port_count();
             match nb_ports {
-                0 => { println!("Sorry: no output midi port found"); }
+                0 => {
+                    println!("Sorry: no output midi port found");
+                }
                 1 => {
                     println!("! output port found:");
                     let name_res = output.port_name(0);

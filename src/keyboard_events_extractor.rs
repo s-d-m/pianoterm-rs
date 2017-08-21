@@ -13,11 +13,10 @@ pub struct KeyEvent {
     pub time_in_ns: u64,
 }
 
-fn separate_released_pressed_keys(mut keyboard_events: &mut Vec<KeyEvent>) -> Result<(), String>
-{
+fn separate_released_pressed_keys(keyboard_events: &mut Vec<KeyEvent>) -> Result<(), String> {
     // precond the events MUST be sorted by time. this function only works on that case
     for i in 1..keyboard_events.len() {
-        if keyboard_events[i].time_in_ns < keyboard_events[ i - 1].time_in_ns {
+        if keyboard_events[i].time_in_ns < keyboard_events[i - 1].time_in_ns {
             panic!("keyboard events must be sorted by time!".to_owned());
         }
     }
@@ -28,22 +27,25 @@ fn separate_released_pressed_keys(mut keyboard_events: &mut Vec<KeyEvent>) -> Re
     // event occurs).
 
     // suboptimal implementation in the case the key_events are sorted
-    let mut pos_shortening_time : Vec<(usize, u64)> = Vec::new();
+    let mut pos_shortening_time: Vec<(usize, u64)> = Vec::new();
     for k in keyboard_events.iter() {
         if let KeyData::Pressed(pitch) = k.data {
             let earliest_time = k.time_in_ns;
 
             // is there a release happening at the same time?
             let find_released_pos_fn = |x: &KeyEvent| match (x.time_in_ns, &x.data) {
-                (time, &KeyData::Released(this_pitch)) if (time == earliest_time) && (this_pitch == pitch) => true,
+                (time, &KeyData::Released(this_pitch)) if (time == earliest_time) &&
+                                                          (this_pitch == pitch) => true,
                 (_, _) => false,
             };
 
-            if let Some(released_elt_index) = keyboard_events.iter().position(find_released_pos_fn) {
-                // there do is a release key happening at the same time.
+            if let Some(released_elt_index) =
+                keyboard_events.iter().position(find_released_pos_fn) {
+                // there is a release key happening at the same time.
                 // Let's find the pressed key responsible for it
                 let find_prev_pressed_fn = |x: &&KeyEvent| match (x.time_in_ns, &x.data) {
-                    (time, &KeyData::Pressed(this_pitch)) if (time < earliest_time) && (this_pitch == pitch) => true,
+                    (time, &KeyData::Pressed(this_pitch)) if (time < earliest_time) &&
+                                                             (this_pitch == pitch) => true,
                     (_, _) => false,
                 };
 
@@ -51,14 +53,14 @@ fn separate_released_pressed_keys(mut keyboard_events: &mut Vec<KeyEvent>) -> Re
                     Some(pressed_key_pos) => {
                         // compute the shortening time
                         let duration = earliest_time - pressed_key_pos.time_in_ns;
-                        let max_shortening_time_in_ns : u64 = 75_000_000; // 75 ms
+                        let max_shortening_time_in_ns: u64 = 75_000_000; // 75 ms
 
                         // shorten the duration by one fourth of its time, in the worst case
                         let shortening_time = cmp::min(max_shortening_time_in_ns, duration / 4);
 
                         pos_shortening_time.push((released_elt_index, shortening_time));
-                    },
-                    None => return Err("error, a there is release event coming from nowhere (failed to find the associated pressed event)".to_owned()),
+                    }
+                    None => return Err("error, there is a release event coming from nowhere (failed to find the associated pressed event)".to_owned()),
                 }
             }
 
@@ -72,26 +74,29 @@ fn separate_released_pressed_keys(mut keyboard_events: &mut Vec<KeyEvent>) -> Re
     return Ok(());
 }
 
-pub fn get_key_events(midi_events: Vec<midi_reader::MidiEvent>) -> Result<Vec<KeyEvent>, String>
-{
+pub fn get_key_events(midi_events: &Vec<midi_reader::MidiEvent>) -> Result<Vec<KeyEvent>, String> {
     // pre condition, events must be sorted!
     for i in 1..midi_events.len() {
-        if midi_events[i].time < midi_events[ i - 1].time {
+        if midi_events[i].time < midi_events[i - 1].time {
             panic!("midi events must be sorted by time!".to_owned());
         }
     }
 
-    let mut res : Vec<KeyEvent> = Vec::new();
+    let mut res: Vec<KeyEvent> = Vec::new();
 
     for ev in midi_events {
         if ev.is_key_released() {
-            res.push(KeyEvent{data: KeyData::Released(ev.get_pitch().unwrap()),
-                              time_in_ns: ev.time})
+            res.push(KeyEvent {
+                         data: KeyData::Released(ev.get_pitch().unwrap()),
+                         time_in_ns: ev.time,
+                     })
         }
 
         if ev.is_key_pressed() {
-            res.push(KeyEvent{data: KeyData::Pressed(ev.get_pitch().unwrap()),
-                              time_in_ns: ev.time})
+            res.push(KeyEvent {
+                         data: KeyData::Pressed(ev.get_pitch().unwrap()),
+                         time_in_ns: ev.time,
+                     })
         }
 
         // sanity check
@@ -103,7 +108,7 @@ pub fn get_key_events(midi_events: Vec<midi_reader::MidiEvent>) -> Result<Vec<Ke
 
     // pre condition, res must be sorted!
     for i in 1..res.len() {
-        if res[i].time_in_ns < res[ i - 1].time_in_ns {
+        if res[i].time_in_ns < res[i - 1].time_in_ns {
             panic!("keyboard events must be sorted by time!".to_owned());
         }
     }

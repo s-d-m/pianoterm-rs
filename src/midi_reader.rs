@@ -6,8 +6,7 @@ use std::error::Error;
 use std::io::SeekFrom;
 use std;
 
-fn is_header_correct(actual_buffer: [u8;4], expected: [u8;4]) -> bool
-{
+fn is_header_correct(actual_buffer: [u8; 4], expected: [u8; 4]) -> bool {
     for i in 0..4 {
         if actual_buffer[i] != expected[i] {
             return false;
@@ -16,14 +15,15 @@ fn is_header_correct(actual_buffer: [u8;4], expected: [u8;4]) -> bool
     true
 }
 
-fn read_magic_number(mut file: &mut std::fs::File, filename: &str) -> Result<(), String>
-{
+fn read_magic_number(file: &mut std::fs::File, filename: &str) -> Result<(), String> {
     let mut header_buffer: [u8; 4] = [0; 4];
     if let Err(e) = file.read_exact(&mut header_buffer) {
-        return Err(format!("Failed to read the header out of file {}: {}", filename, e.description()));
+        return Err(format!("Failed to read the header out of file {}: {}",
+                           filename,
+                           e.description()));
     }
 
-    let midi_header : [u8;4] = ['M' as u8, 'T' as u8, 'h' as u8, 'd' as u8];
+    let midi_header: [u8; 4] = ['M' as u8, 'T' as u8, 'h' as u8, 'd' as u8];
     if !is_header_correct(header_buffer, midi_header) {
         return Err(format!("The file {} doesn't start by the correct header", filename));
     }
@@ -31,39 +31,55 @@ fn read_magic_number(mut file: &mut std::fs::File, filename: &str) -> Result<(),
     Ok(())
 }
 
-fn read_header_size(mut file: &mut std::fs::File, filename: &str) -> Result<(), String>
-{
+fn read_header_size(file: &mut std::fs::File, filename: &str) -> Result<(), String> {
     match file.read_u32::<BigEndian>() {
         Ok(6) => Ok(()),
-        Ok(x) => Err(format!("Invalid header size found in file {}. Expecting 6, got {}", filename, x)),
-        Err(e) => Err(format!("Failed to read header size out of file {}: {}", filename, e.description())),
+        Ok(x) => {
+            Err(format!("Invalid header size found in file {}. Expecting 6, got {}",
+                        filename,
+                        x))
+        }
+        Err(e) => {
+            Err(format!("Failed to read header size out of file {}: {}",
+                        filename,
+                        e.description()))
+        }
     }
 }
 
 #[derive(PartialEq)]
-enum MidiType
-{
+enum MidiType {
     SingleTrack = 0,
     MultipleTrack = 1,
     MultipleSong = 2, // i.e. a series of type 0
 }
 
-fn read_midi_type(mut file: &mut std::fs::File, filename: &str) -> Result<MidiType, String>
-{
+fn read_midi_type(file: &mut std::fs::File, filename: &str) -> Result<MidiType, String> {
     match file.read_u16::<BigEndian>() {
         Ok(0) => Ok(MidiType::SingleTrack),
         Ok(1) => Ok(MidiType::MultipleTrack),
         Ok(2) => Ok(MidiType::MultipleSong),
-        Ok(e) => Err(format!("Invalid midi file type for file {}. Expecting either 0 (single track), 1 (multiple track) or 2 (multiple song), got {}", filename, e)),
-        Err(e) => Err(format!("Failed to read the midi type of {}: {}", filename, e.description())),
+        Ok(e) => {
+            Err(format!("Invalid midi file type for file {}. Expecting either 0 (single track), 1 (multiple track) or 2 (multiple song), got {}",
+                        filename,
+                        e))
+        }
+        Err(e) => {
+            Err(format!("Failed to read the midi type of {}: {}",
+                        filename,
+                        e.description()))
+        }
     }
 }
 
-fn read_nb_tracks(mut file: &mut std::fs::File, filename: &str) -> Result<u16, String>
-{
+fn read_nb_tracks(file: &mut std::fs::File, filename: &str) -> Result<u16, String> {
     match file.read_u16::<BigEndian>() {
         Ok(e) => Ok(e),
-        Err(e) => Err(format!("Failed to read the number of tracks of file {}: {}", filename, e.description())),
+        Err(e) => {
+            Err(format!("Failed to read the number of tracks of file {}: {}",
+                        filename,
+                        e.description()))
+        }
     }
 }
 
@@ -72,8 +88,7 @@ enum TempoStyle {
     Timecode,
 }
 
-fn get_tickdiv(mut file: &mut std::fs::File, filename: &str) -> Result<(u16, TempoStyle), String>
-{
+fn get_tickdiv(file: &mut std::fs::File, filename: &str) -> Result<(u16, TempoStyle), String> {
     // http://midi.mathewvp.com/aboutMidi.htm
 
     // The last two bytes indicate how many Pulses (i.e. clocks) Per Quarter Note
@@ -87,66 +102,61 @@ fn get_tickdiv(mut file: &mut std::fs::File, filename: &str) -> Result<(u16, Tem
     // values may be 4 (MIDI Time Code), 8, 10, 80 (SMPTE bit resolution), or 100.
     // You can specify millisecond-based timing by the data bytes of -25 and 40
     // subframes.
-    let mut bytes : [u8; 2] = [0; 2];
+    let mut bytes: [u8; 2] = [0; 2];
 
     if let Err(e) = file.read_exact(&mut bytes) {
-        return Err(format!("Failed to read data from file {}: {}", filename, e.description()));
+        return Err(format!("Failed to read data from file {}: {}",
+                           filename,
+                           e.description()));
     }
 
-    if (bytes[0] as i8) >= 0
-        {
-            let tickdiv : u16 = ((bytes[0] as u16 ) << 8) | (bytes[1] as u16);
-            return Ok((tickdiv, TempoStyle::MetricalTiming));
-        }
-        else
-        {
-            let frames_per_sec : u8 = (-(bytes[0] as i8)) as u8;
-            match frames_per_sec {
-                24 | 25 | 29 | 30 => {
-                    let resolution : u8 = bytes[1];
-                    let res : u16 = resolution as u16 * frames_per_sec as u16;
-                    Ok((res, TempoStyle::Timecode))
-                },
-                _ => Err("Error: midi file contain an invalid number of frames per second".to_owned())
+    if (bytes[0] as i8) >= 0 {
+        let tickdiv: u16 = ((bytes[0] as u16) << 8) | (bytes[1] as u16);
+        return Ok((tickdiv, TempoStyle::MetricalTiming));
+    } else {
+        let frames_per_sec: u8 = (-(bytes[0] as i8)) as u8;
+        match frames_per_sec {
+            24 | 25 | 29 | 30 => {
+                let resolution: u8 = bytes[1];
+                let res: u16 = resolution as u16 * frames_per_sec as u16;
+                Ok((res, TempoStyle::Timecode))
             }
+            _ => Err("Error: midi file contain an invalid number of frames per second".to_owned()),
         }
+    }
 }
 
-fn read_one_byte(mut file: &mut std::fs::File) -> Result<u8, std::io::Error>
-{
+fn read_one_byte(file: &mut std::fs::File) -> Result<u8, std::io::Error> {
     let mut buffer: [u8; 1] = [0; 1];
     file.read_exact(&mut buffer)?;
     return Ok(buffer[0]);
 }
 
-fn get_variable_length_array(mut file: &mut std::fs::File) -> Result<Vec<u8>, String>
-{
+fn get_variable_length_array(mut file: &mut std::fs::File) -> Result<Vec<u8>, String> {
     let mut res = Vec::<u8>::new();
 
     loop {
         match read_one_byte(&mut file) {
             Err(e) => return Err(format!("Failed to read byte: {}", e.description())),
-            Ok(v) =>
-                {
-                    res.push(v);
-                    if (v & 0x80) == 0 {
-                        // the continuation bit is off, this is the last byte
-                        break;
-                    }
+            Ok(v) => {
+                res.push(v);
+                if (v & 0x80) == 0 {
+                    // the continuation bit is off, this is the last byte
+                    break;
                 }
+            }
         }
     }
 
     Ok(res)
 }
 
-fn get_variable_length_value(vec: &[u8]) -> Result<u64, String>
-{
+fn get_variable_length_value(vec: &[u8]) -> Result<u64, String> {
     if vec.len() > 8 {
         return Err("buffer is too big to extract a variable length value from".to_owned());
     }
 
-    let mut res : u64 = 0;
+    let mut res: u64 = 0;
     for i in 0..vec.len() {
         res = (res << 7) | (vec[i] & 0x7F) as u64;
     }
@@ -156,13 +166,13 @@ fn get_variable_length_value(vec: &[u8]) -> Result<u64, String>
 
 // reads a variable length value. BUT it must be four bytes maximum.
 // otherwise it is not valid.
-fn get_relative_time(mut file: &mut std::fs::File) -> Result<u32, String>
-{
+fn get_relative_time(mut file: &mut std::fs::File) -> Result<u32, String> {
     // recreate the right value by removing the continuation bits
     let buffer = get_variable_length_array(&mut file)?;
 
     if buffer.len() > 4 {
-        return Err(format!("Invalid relative timing found.\nMaximum size allowed is 4 bytes. Bytes used: {}", buffer.len()));
+        return Err(format!("Invalid relative timing found.\nMaximum size allowed is 4 bytes. Bytes used: {}",
+                           buffer.len()));
     }
 
     let res = get_variable_length_value(&buffer)?;
@@ -172,48 +182,46 @@ fn get_relative_time(mut file: &mut std::fs::File) -> Result<u32, String>
 
 
 pub struct MidiEvent {
-   pub time: u64,
-   pub data: Vec<u8>,
+    pub time: u64,
+    pub data: Vec<u8>,
 }
 
 impl MidiEvent {
-
-    pub fn is_key_pressed(&self) -> bool
-    {
+    pub fn is_key_pressed(&self) -> bool {
         return (self.data.len() == 3) && ((self.data[0] & 0xF0) == 0x90) && (self.data[2] != 0x00);
     }
 
-    pub fn is_key_released(&self) -> bool
-    {
+    pub fn is_key_released(&self) -> bool {
         return (self.data.len() == 3) &&
-            ((self.data[0] & 0xF0 == 0x80) || (((self.data[0] & 0xF0) == 0x90) && (self.data[2] == 0x00)));
+               ((self.data[0] & 0xF0 == 0x80) ||
+                (((self.data[0] & 0xF0) == 0x90) && (self.data[2] == 0x00)));
     }
 
-    pub fn get_pitch(&self) -> Option<u8>
-    {
+    pub fn get_pitch(&self) -> Option<u8> {
         match self.data.len() {
             x if x >= 2 => Some(self.data[1]),
-            _ => None
+            _ => None,
         }
     }
 }
 
 // return the next byte of the file without extracting it.
-fn peek_byte(mut file: &mut std::fs::File) -> Result<u8, String>
-{
+fn peek_byte(mut file: &mut std::fs::File) -> Result<u8, String> {
     match read_one_byte(&mut file) {
         Err(e) => Err(format!("Failed to read one byte: {}", e.description())),
         Ok(x) => {
             match file.seek(SeekFrom::Current(-1)) {
-                Err(e) => Err(format!("Failed to change the cursor position within the file {}", e.description())),
+                Err(e) => {
+                    Err(format!("Failed to change the cursor position within the file {}",
+                                e.description()))
+                }
                 Ok(_) => Ok(x),
             }
-        },
+        }
     }
 }
 
-fn get_event(mut file: &mut std::fs::File, last_status_byte: u8) -> Result<MidiEvent, String>
-{
+fn get_event(mut file: &mut std::fs::File, last_status_byte: u8) -> Result<MidiEvent, String> {
     // get_relative_time returns MIDI tics. These are the number of tics that occured since the former event
     // if the song uses the metrical timing tempo_style, or since the beginning of the song if it used the timecode
     // tempo_style. These are *NOT* in a dimension of seconds. Therefore assigning them to res.time which is of type
@@ -224,7 +232,7 @@ fn get_event(mut file: &mut std::fs::File, last_status_byte: u8) -> Result<MidiE
     // the real naonseconds value, based on the tempo style. See function set_real_timings.
 
     let time_in_ns = get_relative_time(&mut file)? as u64;
-    let mut data : Vec<u8> = Vec::new();
+    let mut data: Vec<u8> = Vec::new();
 
     // we need to look at the next byte in the file (there must be at least one).
     // If the most significant bit is cleared then the event byte is last_status_byte, and the byte
@@ -234,7 +242,10 @@ fn get_event(mut file: &mut std::fs::File, last_status_byte: u8) -> Result<MidiE
         x if (x & 0x80) == 0 => last_status_byte,
         x => {
             match file.seek(SeekFrom::Current(1)) { // consume the byte in the file
-                Err(e) => return Err(format!("Failed to change the cursor position within the file {}", e.description())),
+                Err(e) => {
+                    return Err(format!("Failed to change the cursor position within the file {}",
+                                       e.description()))
+                }
                 Ok(_) => x,
             }
         }
@@ -263,33 +274,50 @@ fn get_event(mut file: &mut std::fs::File, last_status_byte: u8) -> Result<MidiE
         // the data
         for _ in 0..length {
             match read_one_byte(&mut file) {
-                Err(e) => return Err(format!("Error while parsing sysex or end of meta midi type: {}", e.description())),
+                Err(e) => {
+                    return Err(format!("Error while parsing sysex or end of meta midi type: {}",
+                                       e.description()))
+                }
                 Ok(byte) => data.push(byte),
             }
         }
 
-        return Ok(MidiEvent{ time: time_in_ns, data: data });
+        return Ok(MidiEvent {
+                      time: time_in_ns,
+                      data: data,
+                  });
     }
 
     if ((event_type & 0xF0) >= 0x80) && ((event_type & 0xF0) != 0xF0) {
-        if    ((event_type & 0xF0) == 0xC0) /* Program Change Event */
-           || ((event_type & 0xF0) == 0xD0) /* or Channel Aftertouch Event */ {
+        if ((event_type & 0xF0) == 0xC0) /* Program Change Event */
+           || ((event_type & 0xF0) == 0xD0)
+        /* or Channel Aftertouch Event */
+        {
             // one more byte
             match read_one_byte(&mut file) {
-                Err(e) => return Err(format!("Error while parsing a program after change event or a channel aftertouch event: {}", e.description())),
+                Err(e) => {
+                    return Err(format!("Error while parsing a program after change event or a channel aftertouch event: {}",
+                                       e.description()))
+                }
                 Ok(byte) => data.push(byte),
             };
         } else {
             // this is a MIDI channel event (more two bytes)
             for _ in 0..2 {
                 match read_one_byte(&mut file) {
-                    Err(e) => return Err(format!("Error while parsing Midi channel event: {}", e.description())),
+                    Err(e) => {
+                        return Err(format!("Error while parsing Midi channel event: {}",
+                                           e.description()))
+                    }
                     Ok(byte) => data.push(byte),
                 };
             }
         }
 
-        return Ok(MidiEvent{ time: time_in_ns, data: data});
+        return Ok(MidiEvent {
+                      time: time_in_ns,
+                      data: data,
+                  });
     }
 
     return Err("Invalid Midi file. Unknown Midi event".to_owned());
@@ -301,8 +329,10 @@ fn get_event(mut file: &mut std::fs::File, last_status_byte: u8) -> Result<MidiE
 // MIDI format 1 (multiple track) can't have tempo event after the first track.
 // call with the last to true when reading track 2+ from a format 1 to ensure
 // validity check.
-fn get_track_events(mut res: &mut Vec<MidiEvent>, mut file: &mut std::fs::File, fail_on_tempo_event: bool) -> Result<(), String>
-{
+fn get_track_events(res: &mut Vec<MidiEvent>,
+                    mut file: &mut std::fs::File,
+                    fail_on_tempo_event: bool)
+                    -> Result<(), String> {
     // http://www.ccarh.org/courses/253/handout/smf/
     //
     // A track chunk consists of a literal identifier string, a length indicator
@@ -323,30 +353,36 @@ fn get_track_events(mut res: &mut Vec<MidiEvent>, mut file: &mut std::fs::File, 
     }
 
 
-    let track_header : [u8;4] = [ 'M' as u8, 'T' as u8, 'r' as u8, 'k' as u8];
+    let track_header: [u8; 4] = ['M' as u8, 'T' as u8, 'r' as u8, 'k' as u8];
     if !is_header_correct(track_buffer, track_header) {
-       return Err(format!("Invalid midi file. Couldn't read the track header"));
+        return Err(format!("Invalid midi file. Couldn't read the track header"));
     }
 
-    let track_length : u32 = match file.read_u32::<BigEndian>() {
+    let track_length: u32 = match file.read_u32::<BigEndian>() {
         Err(e) => return Err(format!("Error while reading file: {}", e.description())),
         Ok(v) => v,
     };
 
     let track_start = match file.seek(SeekFrom::Current(0)) {
-        Err(e) => return Err(format!("Failed to get the position into the file for the beginning of a track: {}", e.description())),
+        Err(e) => {
+            return Err(format!("Failed to get the position into the file for the beginning of a track: {}",
+                               e.description()))
+        }
         Ok(v) => v,
     };
 
-    let mut last_status_byte : u8 = 0x00;
-    let mut this_time_in_ns : u64 = 0; // unit is nanoseconds
+    let mut last_status_byte: u8 = 0x00;
+    let mut this_time_in_ns: u64 = 0; // unit is nanoseconds
 
     loop {
         let event = get_event(&mut file, last_status_byte)?;
 
         // the time of an event was given related to the former event.
         // this is about making it relative to the beginning of the song
-        let event = MidiEvent{ time: event.time + this_time_in_ns, data: event.data};
+        let event = MidiEvent {
+            time: event.time + this_time_in_ns,
+            data: event.data,
+        };
         this_time_in_ns = event.time;
 
         last_status_byte = event.data[0];
@@ -356,7 +392,7 @@ fn get_track_events(mut res: &mut Vec<MidiEvent>, mut file: &mut std::fs::File, 
             return Err("Error: a tempo event found at a forbidden place".to_owned());
         }
 
-        let end_of_track_found  = (event.data[0] == 0xFF) && (event.data[1] == 0x2F);
+        let end_of_track_found = (event.data[0] == 0xFF) && (event.data[1] == 0x2F);
 
         res.push(event);
 
@@ -366,7 +402,10 @@ fn get_track_events(mut res: &mut Vec<MidiEvent>, mut file: &mut std::fs::File, 
     }
 
     let track_end = match file.seek(SeekFrom::Current(0)) {
-        Err(e) => return Err(format!("Failed to get the position into the file for the end of a track: {}", e.description())),
+        Err(e) => {
+            return Err(format!("Failed to get the position into the file for the end of a track: {}",
+                               e.description()))
+        }
         Ok(v) => v,
     };
 
@@ -377,11 +416,13 @@ fn get_track_events(mut res: &mut Vec<MidiEvent>, mut file: &mut std::fs::File, 
     Ok(())
 }
 
-fn set_real_timings(mut events : &mut [MidiEvent], tickdiv: u16, timing_style : TempoStyle) -> Result<(), String>
-{
+fn set_real_timings(events: &mut [MidiEvent],
+                    tickdiv: u16,
+                    timing_style: TempoStyle)
+                    -> Result<(), String> {
     // pre condition, events must be sorted!
     for i in 1..events.len() {
-        if events[i].time < events[ i - 1].time {
+        if events[i].time < events[i - 1].time {
             panic!("events must be sorted by time!".to_owned());
         }
     }
@@ -391,19 +432,20 @@ fn set_real_timings(mut events : &mut [MidiEvent], tickdiv: u16, timing_style : 
             for event in events {
                 event.time = event.time * tickdiv as u64 * 1_000_000;
             }
-        },
+        }
         TempoStyle::MetricalTiming => {
-            let mut ref_ticks : u64 = 0;
-            let mut ref_time_in_ns : u64 = 0;
+            let mut ref_ticks: u64 = 0;
+            let mut ref_time_in_ns: u64 = 0;
 
             // default tempo is 120 beats per minutes
             // 1 minute -> 60 000 000 microseconds
             // 60000000 / 120 -> 500 000 microseconds per quarter note
-            let mut us_per_quarter_note : u64 = 500_000;
+            let mut us_per_quarter_note: u64 = 500_000;
             for event in events.iter_mut() {
                 let last_ticks = event.time;
                 let delta_ticks = last_ticks - ref_ticks;
-                event.time = ref_time_in_ns + ((delta_ticks * us_per_quarter_note * 1_000) / tickdiv as u64);
+                event.time = ref_time_in_ns +
+                             ((delta_ticks * us_per_quarter_note * 1_000) / tickdiv as u64);
 
                 if (event.data[0] == 0xFF) && (event.data[1] == 0x51) {
                     // this is a tempo event
@@ -414,18 +456,19 @@ fn set_real_timings(mut events : &mut [MidiEvent], tickdiv: u16, timing_style : 
                     ref_ticks = last_ticks;
                     ref_time_in_ns = event.time;
 
-                    us_per_quarter_note = ((event.data[3] as u64) << 16) | ((event.data[4] as u64) << 8) | (event.data[5] as u64);
+                    us_per_quarter_note = ((event.data[3] as u64) << 16) |
+                                          ((event.data[4] as u64) << 8) |
+                                          (event.data[5] as u64);
                 }
             }
-        },
+        }
     }
 
     return Ok(());
 }
 
 
-pub fn get_midi_events(filename: &str) -> Result<Vec<MidiEvent>, String>
-{
+pub fn get_midi_events(filename: &str) -> Result<Vec<MidiEvent>, String> {
     let mut file = match std::fs::File::open(filename) {
         Err(e) => {
             return Err(format!("Failed to open file {}: {}", filename, e.description()));
@@ -465,12 +508,14 @@ pub fn get_midi_events(filename: &str) -> Result<Vec<MidiEvent>, String>
     read_header_size(&mut file, filename)?;
     let midi_type = read_midi_type(&mut file, filename)?;
     if midi_type == MidiType::MultipleSong {
-        return Err("this program doesn't handle multiple song midi files - yet -".to_owned())
+        return Err("this program doesn't handle multiple song midi files - yet -".to_owned());
     }
 
     let nb_tracks = read_nb_tracks(&mut file, filename)?;
     if (midi_type == MidiType::SingleTrack) && (nb_tracks != 1) {
-        return Err(format!("Midi file {} is supposed to be a single track one but it says it contains {} tracks", filename, nb_tracks));
+        return Err(format!("Midi file {} is supposed to be a single track one but it says it contains {} tracks",
+                           filename,
+                           nb_tracks));
     }
 
     let (tickdiv, timing_type) = get_tickdiv(&mut file, filename)?;
@@ -478,10 +523,12 @@ pub fn get_midi_events(filename: &str) -> Result<Vec<MidiEvent>, String>
         return Err("Error: a quarter note is made of 0 pulses (which is impossible) according to the midi data".to_owned());
     }
 
-    let mut events : Vec<MidiEvent> = Vec::new();
+    let mut events: Vec<MidiEvent> = Vec::new();
 
     for i in 0..nb_tracks {
-        get_track_events(&mut events, &mut file, (midi_type == MidiType::MultipleTrack) && (i != 0))?;
+        get_track_events(&mut events,
+                         &mut file,
+                         (midi_type == MidiType::MultipleTrack) && (i != 0))?;
     }
 
     // by now the whole file should have been read
@@ -493,7 +540,10 @@ pub fn get_midi_events(filename: &str) -> Result<Vec<MidiEvent>, String>
     let file_size = metadata.len();
 
     let nb_read_bytes = match file.seek(SeekFrom::Current(0)) {
-        Err(e) => return Err(format!("Failed to get the position into the file for the end of a track: {}", e.description())),
+        Err(e) => {
+            return Err(format!("Failed to get the position into the file for the end of a track: {}",
+                               e.description()))
+        }
         Ok(v) => v,
     };
 
@@ -502,15 +552,15 @@ pub fn get_midi_events(filename: &str) -> Result<Vec<MidiEvent>, String>
     }
 
     events.sort_by(|a, b| match (a, b) {
-        (a, b) if a.time < b.time => std::cmp::Ordering::Less,
-        (a, b) if a.time > b.time => std::cmp::Ordering::Greater,
-        _ => std::cmp::Ordering::Equal,
-    });
+                       (a, b) if a.time < b.time => std::cmp::Ordering::Less,
+                       (a, b) if a.time > b.time => std::cmp::Ordering::Greater,
+                       _ => std::cmp::Ordering::Equal,
+                   });
 
     set_real_timings(&mut events, tickdiv, timing_type)?;
 
     // keep only the midi events
-    let mut res : Vec<MidiEvent> = Vec::new();
+    let mut res: Vec<MidiEvent> = Vec::new();
 
     for event in events {
         if (event.data[0] & 0xF0) != 0xF0 {
