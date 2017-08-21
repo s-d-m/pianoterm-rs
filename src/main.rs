@@ -3,6 +3,7 @@ extern crate clap;
 mod ports_printer;
 mod midi_reader;
 mod keyboard_events_extractor;
+mod utils;
 
 fn main() {
     let input_midi_port_option_name = "input port";
@@ -46,15 +47,23 @@ fn main() {
 
     match options.value_of(input_midi_file_option_name) {
         Some(filename) => {
-            match midi_reader::get_midi_events(filename) {
-                Ok(events) => {
-                    match keyboard_events_extractor::get_key_events(events) {
-                        Ok(events) => println!("extracted {} keyboard events", events.len()),
-                        Err(e) => println!("Error occured: {}", e),
-                    };
-                },
-                Err(e) => println!("Error occured: {}", e),
-            }
+            let midi_events = midi_reader::get_midi_events(filename).unwrap_or_else(|e| {
+                println!("Error occured: {}", e);
+                std::process::exit(2)
+            });
+
+            let keyboard_events = keyboard_events_extractor::get_key_events(&midi_events)
+                .unwrap_or_else(|e| {
+                                    println!("Error occured: {}", e);
+                                    std::process::exit(2)
+                                });
+
+            println!("extracted {} keyboard events", keyboard_events.len());
+
+            let _song = utils::group_events_by_time(&midi_events, &keyboard_events).unwrap_or_else(|e| {
+                println!("Error occured while grouping events occuring at the same time: {}", e);
+                std::process::exit(2);
+            });
         }
         None => {
             println!("listening to input port for midi events");

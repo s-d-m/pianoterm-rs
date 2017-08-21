@@ -1,14 +1,14 @@
 use std::cmp;
 use midi_reader;
 
-pub enum KeyData
-{
+#[derive(Clone, Copy)]
+pub enum KeyData {
     Pressed(u8), // u8 is the pitch
     Released(u8),
 }
 
-pub struct KeyEvent
-{
+#[derive(Clone, Copy)]
+pub struct KeyEvent {
     pub data: KeyData,
     pub time_in_ns: u64,
 }
