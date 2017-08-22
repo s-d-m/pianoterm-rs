@@ -95,14 +95,14 @@ pub fn group_events_by_time(midi_events: &Vec<MidiEvent>,
     // sanity check: all elements in res must hold at least one event
     if let Some(_) = res.iter()
            .find(|x| x.midi_messages.is_empty() && x.key_events.is_empty()) {
-        panic!("Error: a music event does not contain any midi or key event");
+        return Err("Error: a music event does not contain any midi or key event".to_owned());
     }
 
     // sanity check: worst case res has as many elts as midi_events + key_events
     // (each event occuring at a different time)
     let nb_input_events = midi_events.len() + keyboard_events.len();
     if res.len() > nb_input_events {
-        panic!("Error while grouping events by time, some events just got automagically created");
+        return Err("Error while grouping events by time, some events just got automagically created".to_owned());
     }
 
     // sanity check: count the total number of midi and key events in res. It must
@@ -112,18 +112,18 @@ pub fn group_events_by_time(midi_events: &Vec<MidiEvent>,
         .sum::<usize>();
 
     if nb_events > nb_input_events {
-        panic!("Error while grouping events by time, some events magically appeared");
+        return Err("Error while grouping events by time, some events magically appeared".to_owned());
     }
 
     if nb_events < nb_input_events {
-        panic!("Error while grouping events by time, some events just disappeared");
+        return Err("Error while grouping events by time, some events just disappeared".to_owned());
     }
 
     // sanity check: for every two different elements in res, they must start at different time
     // since res is sorted by now, only need to check
     for i in 1..res.len() {
         if res[i - 1].time_in_ns == res[i].time_in_ns {
-            panic!("Error two different group of events appears at the same time");
+            return Err("Error two different group of events appears at the same time".to_owned());
         }
     }
 
@@ -156,7 +156,7 @@ pub fn group_events_by_time(midi_events: &Vec<MidiEvent>,
         .sum::<usize>();
 
     if nb_pressed != nb_released {
-        panic!("Error: mismatch between key pressed and key release");
+        return Err("Error: mismatch between key pressed and key release".to_owned());
     }
 
     // sanity check: a key release and a key pressed event with the same pitch
@@ -171,7 +171,7 @@ pub fn group_events_by_time(midi_events: &Vec<MidiEvent>,
                                  _ => false,
                              })
                        .is_some() {
-                    panic!("Error: a key press happens at the same time as a key release");
+                    return Err("Error: a key press happens at the same time as a key release".to_owned());
                 }
             }
         }
