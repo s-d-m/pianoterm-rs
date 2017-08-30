@@ -15,7 +15,7 @@ pub fn print_inputs() {
                     println!("Sorry: no input midi port found");
                 }
                 1 => {
-                    println!("! input port found:");
+                    println!("1 input port found:");
                     let name_res = input.port_name(0);
                     match name_res {
                         Ok(name) => println!("  0 -> {}", name),
@@ -49,7 +49,7 @@ pub fn print_outputs() {
                     println!("Sorry: no output midi port found");
                 }
                 1 => {
-                    println!("! output port found:");
+                    println!("1 output port found:");
                     let name_res = output.port_name(0);
                     match name_res {
                         Ok(name) => println!("  0 -> {}", name),
