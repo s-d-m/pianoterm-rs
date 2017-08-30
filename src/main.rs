@@ -1,13 +1,18 @@
 extern crate clap;
 
+use std::str::FromStr;
+use std::error::Error;
+
 mod ports_printer;
 mod midi_reader;
 mod keyboard_events_extractor;
 mod utils;
+mod music_player;
 
 fn main() {
     let input_midi_port_option_name = "input port";
     let input_midi_file_option_name = "input midi file";
+    let output_midi_port_option_name = "output port";
     let list_option_name = "list";
 
     let options = clap::App::new("pianoterm-rs")
@@ -22,7 +27,7 @@ fn main() {
                  .value_name("INPUT_PORT_NUMBER")
                  .required_unless_one(&[input_midi_file_option_name, list_option_name])
                  .conflicts_with(input_midi_file_option_name))
-        .arg(clap::Arg::with_name("output-port")
+        .arg(clap::Arg::with_name(output_midi_port_option_name)
                  .short("o")
                  .long("output-port")
                  .takes_value(true)
@@ -45,6 +50,24 @@ fn main() {
         return;
     }
 
+    let port = match options.value_of(output_midi_port_option_name) {
+        Some(value) => {
+            match u32::from_str(value) {
+                Ok(v) => v,
+                Err(e) => {
+                    println!("Error: invalid output port given.{}\n. Below is the list of possible output ports", e.description());
+                    ports_printer::print_outputs();
+                    std::process::exit(2)
+                }
+            }
+        }
+        None => {
+            println!("Error: an output port must be given. Below is the list of possible output ports");
+            ports_printer::print_outputs();
+            std::process::exit(2)
+        }
+    };
+
     match options.value_of(input_midi_file_option_name) {
         Some(filename) => {
             let midi_events = midi_reader::get_midi_events(filename).unwrap_or_else(|e| {
@@ -60,10 +83,13 @@ fn main() {
 
             println!("extracted {} keyboard events", keyboard_events.len());
 
-            let _song = utils::group_events_by_time(&midi_events, &keyboard_events).unwrap_or_else(|e| {
+            let song = utils::group_events_by_time(&midi_events, &keyboard_events).unwrap_or_else(|e| {
                 println!("Error occured while grouping events occuring at the same time: {}", e);
                 std::process::exit(2);
             });
+
+
+            music_player::play(song, port);
         }
         None => {
             println!("listening to input port for midi events");

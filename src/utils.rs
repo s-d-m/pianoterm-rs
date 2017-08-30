@@ -5,12 +5,12 @@ use midi_reader::MidiEvent;
 type MidiMessage = Vec<u8>;
 
 pub struct MusicEvent {
-    time_in_ns: u64,
-    midi_messages: Vec<MidiMessage>,
-    key_events: Vec<KeyData>,
+    pub time_in_ns: u64,
+    pub midi_messages: Vec<MidiMessage>,
+    pub key_events: Vec<KeyData>,
 }
 
-type Song = Vec<MusicEvent>;
+pub type Song = Vec<MusicEvent>;
 
 
 fn is_key_release_event(data: &MidiMessage) -> bool {
