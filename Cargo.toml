@@ -7,3 +7,4 @@ authors = ["Samuel DA MOTA <da.mota.sam@gmail.com>"]
 clap = "^2"
 midir = "^0.3.2"
 byteorder = "^1.1.0"
+rustbox = "^0.9.0"
