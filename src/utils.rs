@@ -39,7 +39,7 @@ fn fix_midi_order(song: &mut Song) {
                           .iter()
                           .position(|&ref x| is_key_down_event(&x) && (x[1] == pitch)) {
                     Some(down_dist) => pos_to_switch.push((cur_pos, cur_pos + down_dist)),
-                    _ => (),        
+                    _ => (),
                 }
             }
         }
