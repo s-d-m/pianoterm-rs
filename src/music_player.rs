@@ -6,6 +6,138 @@ use std;
 use utils;
 use self::rustbox::{RustBox, Event};
 
+fn draw_piano_key(ui: &RustBox, x: usize, y: usize, width: usize, height: usize, color: u16)
+{
+    for i in x .. x + width {
+        for j in y .. y + height {
+            unsafe {
+                ui.change_cell(i, j, 0x2588, color, rustbox::Color::Default.as_16color());
+            }
+         }
+    }
+}
+
+fn draw_separating_line(ui: &RustBox, x: usize, y: usize, height: usize, bg_color: u16)
+{
+    for j in y .. y + height {
+        unsafe {
+            ui.change_cell(x, j, 0x2502, rustbox::Color::Black.as_16color(), bg_color);
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct OctaveColor
+{
+    do_color :u8,
+    re_color :u8,
+    mi_color :u8,
+    fa_color :u8,
+    sol_color :u8,
+    la_color :u8,
+    si_color :u8,
+
+    do_diese_color :u8,
+    re_diese_color :u8,
+    fa_diese_color :u8,
+    sol_diese_color :u8,
+    la_diese_color :u8,
+}
+
+impl OctaveColor
+{
+    pub fn new() -> Self
+    {
+        OctaveColor {
+            do_color:  rustbox::Color::White.as_16color() as u8,
+            re_color:  rustbox::Color::White.as_16color() as u8,
+            mi_color:  rustbox::Color::White.as_16color() as u8,
+            fa_color:  rustbox::Color::White.as_16color() as u8,
+            sol_color: rustbox::Color::White.as_16color() as u8,
+            la_color:  rustbox::Color::White.as_16color() as u8,
+            si_color:  rustbox::Color::White.as_16color() as u8,
+
+            do_diese_color:  rustbox::Color::Black.as_16color() as u8,
+            re_diese_color:  rustbox::Color::Black.as_16color() as u8,
+            fa_diese_color:  rustbox::Color::Black.as_16color() as u8,
+            sol_diese_color: rustbox::Color::Black.as_16color() as u8,
+            la_diese_color:  rustbox::Color::Black.as_16color() as u8,
+        }
+    }
+}
+
+struct KeysColor
+{
+    la_0_color: u8,
+    si_0_color: u8,
+    la_diese_0_color: u8,
+    octaves: [OctaveColor; 7],
+    do_8_color: u8,
+}
+
+impl KeysColor
+{
+    pub fn new() -> Self
+    {
+        KeysColor {
+            la_0_color:  rustbox::Color::White.as_16color() as u8,
+            si_0_color:  rustbox::Color::White.as_16color() as u8,
+            la_diese_0_color:  rustbox::Color::Black.as_16color() as u8,
+            octaves: [OctaveColor::new(); 7],
+            do_8_color:  rustbox::Color::White.as_16color() as u8,
+        }
+    }
+}
+
+fn draw_octave(ui: &RustBox, x: usize, y: usize, notes_color: &OctaveColor)
+{
+  draw_piano_key(ui, x,     y, 3, 8, notes_color.do_color as u16);  // do
+  draw_piano_key(ui, x + 3, y, 4, 8, notes_color.re_color as u16);  // re
+  draw_piano_key(ui, x + 7, y, 3, 8, notes_color.mi_color as u16);  // mi
+
+  draw_piano_key(ui, x + 10, y, 4, 8, notes_color.fa_color as u16); // fa
+  draw_piano_key(ui, x + 14, y, 4, 8, notes_color.sol_color as u16); // sol
+  draw_piano_key(ui, x + 18, y, 3, 8, notes_color.la_color as u16); // la
+  draw_piano_key(ui, x + 21, y, 4, 8, notes_color.si_color as u16); // si
+
+  draw_piano_key(ui, x + 2, y, 2, 5, notes_color.do_diese_color as u16);  // do#
+  draw_piano_key(ui, x + 6, y, 2, 5, notes_color.re_diese_color as u16);  // re#
+
+  draw_separating_line(ui, x + 3, y + 5, 3, notes_color.do_color as u16); // between do and re
+  draw_separating_line(ui, x + 6, y + 5, 3, notes_color.re_color as u16); // between re and mi
+
+  draw_piano_key(ui, x + 13, y, 2, 5, notes_color.fa_diese_color as u16); // fa#
+  draw_piano_key(ui, x + 17, y, 2, 5, notes_color.sol_diese_color as u16); // sol#
+  draw_piano_key(ui, x + 21, y, 2, 5, notes_color.la_diese_color as u16); // la#
+
+  draw_separating_line(ui, x + 14, y + 5, 3, notes_color.fa_color as u16); // between fa and sol
+  draw_separating_line(ui, x + 18, y + 5, 3, notes_color.sol_color as u16); // between sol and la
+  draw_separating_line(ui, x + 21, y + 5, 3, notes_color.la_color as u16); // between la and si
+
+  draw_separating_line(ui, x + 10, y, 8, notes_color.mi_color as u16); // between mi and fa
+}
+
+fn draw_keyboard(ui: &RustBox, keyboard: &KeysColor, pos_x: usize, pos_y: usize)
+{
+  draw_piano_key(ui, pos_x + 1, pos_y, 3, 8, keyboard.la_0_color as u16); // la 0
+  draw_piano_key(ui, pos_x + 4, pos_y, 4, 8, keyboard.si_0_color as u16); // si 0
+  draw_piano_key(ui, pos_x + 4, pos_y, 2, 5, keyboard.la_diese_0_color as u16); // la# 0
+  draw_separating_line(ui, pos_x + 4, pos_y + 5, 3, keyboard.la_0_color as u16); // between la0 and si0
+
+  for i in 0 .. 7  {
+    draw_octave(ui, pos_x + 8 + (25 * i), pos_y, &keyboard.octaves[i]);
+  }
+
+  draw_piano_key(ui, pos_x + 8 + (25 * 7), pos_y, 4, 8, keyboard.do_8_color as u16); // do 8
+
+  for i in 0 .. 7  {
+    draw_separating_line(ui, pos_x + 8 + (25 * (i + 1)), pos_y, 8, keyboard.octaves[i].si_color as u16); // between octaves
+  }
+
+  draw_separating_line(ui, pos_x + 8 + (25 * 0), pos_y, 8, keyboard.si_0_color as u16);
+
+}
+
 fn play_music(midi_out: &mut midir::MidiOutputConnection, event: &utils::MusicEvent)
 {
     for message in &event.midi_messages {
@@ -21,12 +153,17 @@ fn play_music(midi_out: &mut midir::MidiOutputConnection, event: &utils::MusicEv
 fn init_ref_pos(width: usize, height: usize) -> (usize, usize) {
     let keyboard_height = 8;
     let keyboard_width = 188;
-    ((width - keyboard_width) / 2, (height - keyboard_height) / 2)
+
+    let ref_x = if width > keyboard_width { (width - keyboard_width) / 2 } else { 0 };
+    let ref_y = if height > keyboard_height { (height - keyboard_height) / 2 } else { 0 };
+
+    (ref_x, ref_y)
 }
 
-fn update_screen(ui: &RustBox, ref_x: usize, ref_y: usize)
+fn update_screen(ui: &RustBox, keyboard: &KeysColor, ref_x: usize, ref_y: usize)
 {
     ui.clear();
+    draw_keyboard(ui, keyboard, ref_x, ref_y);
     ui.print(ref_x, ref_y + 10, rustbox::RB_BOLD, rustbox::Color::Magenta, rustbox::Color::Default, "press <CTRL + q> to quit");
     ui.print(ref_x, ref_y + 11, rustbox::RB_BOLD, rustbox::Color::Magenta, rustbox::Color::Default, "press <space> to pause/unpause");
     ui.present();
@@ -57,10 +194,11 @@ pub fn play(song: utils::Song, midi_output_port: u32) {
     let ui = ui.unwrap();
     let (mut x, mut y) = init_ref_pos(ui.width(), ui.height());
 
+    let keyboard = KeysColor::new();
     let nb_events = song.len();
     for i in 0 .. nb_events {
 
-        update_screen(&ui, x, y);
+        update_screen(&ui, &keyboard, x, y);
         let current_event = &song[i];
         play_music(&mut conn_out, current_event);
 
