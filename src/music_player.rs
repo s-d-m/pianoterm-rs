@@ -4,7 +4,7 @@ extern crate rustbox;
 use std::error::Error;
 use std;
 use utils;
-use self::rustbox::{RustBox, Event};
+use self::rustbox::{RustBox, Event, Key};
 
 fn draw_piano_key(ui: &RustBox, x: usize, y: usize, width: usize, height: usize, color: u16)
 {
@@ -170,6 +170,8 @@ fn update_screen(ui: &RustBox, keyboard: &KeysColor, ref_x: usize, ref_y: usize)
 }
 
 pub fn play(song: utils::Song, midi_output_port: u32) {
+    let mut exit_requested = false;
+
     let midi_out = midir::MidiOutput::new("Midi output from pianoterm-rs");
     if let Err(e) = midi_out {
         println!("Error occured while initialising the midi output: {}", e.description());
@@ -208,23 +210,27 @@ pub fn play(song: utils::Song, midi_output_port: u32) {
             let time_to_wait = std::time::Duration::new(time_to_wait / one_billion, (time_to_wait % one_billion) as u32);
 
             let started_time = std::time::Instant::now();
+            let mut is_in_pause = false;
 
             loop {
+                if exit_requested {
+                    return;
+                }
+
                 let time_now = std::time::Instant::now();
                 let waited_time = time_now - started_time;
-                if waited_time > time_to_wait {
+
+                if (!is_in_pause) && (waited_time > time_to_wait) {
                     break;
                 }
 
                 let time_to_sleep = {
-                    let remaining_time = time_to_wait - waited_time;
-                    if remaining_time > std::time::Duration::from_millis(100) {
-                        std::time::Duration::from_millis(100)
+                    if time_to_wait > waited_time {
+                        std::cmp::min(std::time::Duration::from_millis(100), time_to_wait - waited_time)
                     } else {
-                        remaining_time
+                        std::time::Duration::from_millis(100)
                     }
                 };
-
 
                 match ui.peek_event(time_to_sleep, false) {
                     Ok(Event::NoEvent)
@@ -238,7 +244,13 @@ pub fn play(song: utils::Song, midi_output_port: u32) {
                         x = this_x;
                         y = this_y;
                     },
-                    Ok(Event::KeyEvent(_)) => (), // TODO handle key events.
+                    Ok(Event::KeyEvent(key)) => {
+                        match key {
+                            Key::Ctrl('q') => exit_requested = true,
+                            Key::Char(' ') => is_in_pause = !is_in_pause,
+                            _ => (),
+                        }
+                    },
                     Err(e) => { println!("Error occured in rustbox: {}", e.description()); return (); },
                 };
 
