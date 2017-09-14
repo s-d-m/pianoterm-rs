@@ -5,6 +5,7 @@ use std::error::Error;
 use std;
 use utils;
 use self::rustbox::{RustBox, Event, Key};
+use keyboard_events_extractor::KeyData;
 
 fn draw_piano_key(ui: &RustBox, x: usize, y: usize, width: usize, height: usize, color: u16)
 {
@@ -50,18 +51,17 @@ impl OctaveColor
     {
         OctaveColor {
             do_color:  rustbox::Color::White.as_16color() as u8,
+            do_diese_color:  rustbox::Color::Black.as_16color() as u8,
             re_color:  rustbox::Color::White.as_16color() as u8,
+            re_diese_color:  rustbox::Color::Black.as_16color() as u8,
             mi_color:  rustbox::Color::White.as_16color() as u8,
             fa_color:  rustbox::Color::White.as_16color() as u8,
-            sol_color: rustbox::Color::White.as_16color() as u8,
-            la_color:  rustbox::Color::White.as_16color() as u8,
-            si_color:  rustbox::Color::White.as_16color() as u8,
-
-            do_diese_color:  rustbox::Color::Black.as_16color() as u8,
-            re_diese_color:  rustbox::Color::Black.as_16color() as u8,
             fa_diese_color:  rustbox::Color::Black.as_16color() as u8,
+            sol_color: rustbox::Color::White.as_16color() as u8,
             sol_diese_color: rustbox::Color::Black.as_16color() as u8,
+            la_color:  rustbox::Color::White.as_16color() as u8,
             la_diese_color:  rustbox::Color::Black.as_16color() as u8,
+            si_color:  rustbox::Color::White.as_16color() as u8,
         }
     }
 }
@@ -69,8 +69,8 @@ impl OctaveColor
 struct KeysColor
 {
     la_0_color: u8,
-    si_0_color: u8,
     la_diese_0_color: u8,
+    si_0_color: u8,
     octaves: [OctaveColor; 7],
     do_8_color: u8,
 }
@@ -81,12 +81,53 @@ impl KeysColor
     {
         KeysColor {
             la_0_color:  rustbox::Color::White.as_16color() as u8,
-            si_0_color:  rustbox::Color::White.as_16color() as u8,
             la_diese_0_color:  rustbox::Color::Black.as_16color() as u8,
+            si_0_color:  rustbox::Color::White.as_16color() as u8,
             octaves: [OctaveColor::new(); 7],
             do_8_color:  rustbox::Color::White.as_16color() as u8,
         }
     }
+
+    fn set_color_(&mut self, pitch: u8, normal_key_color: rustbox::Color, diese_key_color: rustbox::Color) {
+        let do_8_value = 24 + 12 * 7;
+
+        match pitch {
+            21 => self.la_0_color = normal_key_color.as_16color() as u8,
+            22 => self.la_diese_0_color = diese_key_color.as_16color() as u8,
+            23 => self.si_0_color = normal_key_color.as_16color() as u8,
+            p if (p >= 24) && (p < do_8_value) => {
+                let octave_number = ((p - 24) / 12) as usize;
+                let key_pos = (p - 24) % 12;
+                match key_pos {
+                    0 => self.octaves[octave_number].do_color = normal_key_color.as_16color() as u8,
+                    1 => self.octaves[octave_number].do_diese_color = diese_key_color.as_16color() as u8,
+                    2 => self.octaves[octave_number].re_color = normal_key_color.as_16color() as u8,
+                    3 => self.octaves[octave_number].re_diese_color = diese_key_color.as_16color() as u8,
+                    4 => self.octaves[octave_number].mi_color = normal_key_color.as_16color() as u8,
+                    5 => self.octaves[octave_number].fa_color = normal_key_color.as_16color() as u8,
+                    6 => self.octaves[octave_number].fa_diese_color = diese_key_color.as_16color() as u8,
+                    7 => self.octaves[octave_number].sol_color = normal_key_color.as_16color() as u8,
+                    8 => self.octaves[octave_number].sol_diese_color = diese_key_color.as_16color() as u8,
+                    9 => self.octaves[octave_number].la_color = normal_key_color.as_16color() as u8,
+                    10 => self.octaves[octave_number].la_diese_color = diese_key_color.as_16color() as u8,
+                    11 => self.octaves[octave_number].si_color = normal_key_color.as_16color() as u8,
+                    e => panic!("invalid pitch for keyboard set: values should be between 21 (la_0) and {} (do_8), but got {}", do_8_value, e),
+                }
+            },
+            x if x == do_8_value => self.do_8_color = normal_key_color.as_16color() as u8,
+            e => panic!("invalid pitch for keyboard set: values should be between 21 (la_0) and {} (do_8), but got {}", do_8_value, e),
+
+        }
+    }
+
+    pub fn reset_color(&mut self, pitch: u8) {
+        self.set_color_(pitch, rustbox::Color::White, rustbox::Color::Black);
+    }
+
+    pub fn set_color(&mut self, pitch: u8) {
+        self.set_color_(pitch, rustbox::Color::Blue, rustbox::Color::Cyan);
+    }
+
 }
 
 fn draw_octave(ui: &RustBox, x: usize, y: usize, notes_color: &OctaveColor)
@@ -160,6 +201,15 @@ fn init_ref_pos(width: usize, height: usize) -> (usize, usize) {
     (ref_x, ref_y)
 }
 
+fn update_keyboard(keyboard: &mut KeysColor, key_events: &Vec<KeyData>) {
+    for k_ev in key_events {
+        match *k_ev {
+            KeyData::Pressed(pitch) => keyboard.set_color(pitch),
+            KeyData::Released(pitch) => keyboard.reset_color(pitch),
+        }
+    }
+}
+
 fn update_screen(ui: &RustBox, keyboard: &KeysColor, ref_x: usize, ref_y: usize)
 {
     ui.clear();
@@ -196,12 +246,13 @@ pub fn play(song: utils::Song, midi_output_port: u32) {
     let ui = ui.unwrap();
     let (mut x, mut y) = init_ref_pos(ui.width(), ui.height());
 
-    let keyboard = KeysColor::new();
+    let mut keyboard = KeysColor::new();
     let nb_events = song.len();
     for i in 0 .. nb_events {
 
-        update_screen(&ui, &keyboard, x, y);
         let current_event = &song[i];
+        update_keyboard(&mut keyboard, &current_event.key_events);
+        update_screen(&ui, &keyboard, x, y);
         play_music(&mut conn_out, current_event);
 
         if i != nb_events - 1 {
