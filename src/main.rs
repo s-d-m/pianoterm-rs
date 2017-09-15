@@ -8,6 +8,7 @@ mod midi_reader;
 mod keyboard_events_extractor;
 mod utils;
 mod music_player;
+mod signal_handler;
 
 fn main() {
     let input_midi_port_option_name = "input port";
@@ -67,6 +68,8 @@ fn main() {
             std::process::exit(2)
         }
     };
+
+    signal_handler::register_signal_listener();
 
     match options.value_of(input_midi_file_option_name) {
         Some(filename) => {

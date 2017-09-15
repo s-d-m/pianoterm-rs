@@ -6,6 +6,8 @@ use std;
 use utils;
 use self::rustbox::{RustBox, Event, Key};
 use keyboard_events_extractor::KeyData;
+use std::sync::atomic::Ordering;
+use signal_handler::{EXIT_REQUESTED_BY_SIGNAL, PAUSE_REQUESTED_BY_SIGNAL, CONTINUE_REQUESTED_BY_SIGNAL};
 
 fn draw_piano_key(ui: &RustBox, x: usize, y: usize, width: usize, height: usize, color: u16)
 {
@@ -264,6 +266,21 @@ pub fn play(song: utils::Song, midi_output_port: u32) {
             let mut is_in_pause = false;
 
             loop {
+                if EXIT_REQUESTED_BY_SIGNAL.load(Ordering::Relaxed) {
+                    EXIT_REQUESTED_BY_SIGNAL.store(false, Ordering::Relaxed);
+                    exit_requested = true;
+                }
+
+                if PAUSE_REQUESTED_BY_SIGNAL.load(Ordering::Relaxed) {
+                    PAUSE_REQUESTED_BY_SIGNAL.store(false, Ordering::Relaxed);
+                    is_in_pause = true;
+                }
+
+                if CONTINUE_REQUESTED_BY_SIGNAL.load(Ordering::Relaxed) {
+                    CONTINUE_REQUESTED_BY_SIGNAL.store(false, Ordering::Relaxed);
+                    is_in_pause = false;
+                }
+
                 if exit_requested {
                     return;
                 }
