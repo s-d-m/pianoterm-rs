@@ -2,7 +2,13 @@ use std;
 use keyboard_events_extractor::{KeyEvent, KeyData};
 use midi_reader::MidiEvent;
 
-type MidiMessage = Vec<u8>;
+pub const LA_0: u8 = 21;
+pub const LA_DIESE_0: u8 = 22;
+pub const SI_0: u8 = 23;
+pub const DO_1: u8 = 24;
+pub const DO_8: u8 = 108;
+
+pub type MidiMessage = Vec<u8>;
 
 pub struct MusicEvent {
     pub time_in_ns: u64,
@@ -13,13 +19,115 @@ pub struct MusicEvent {
 pub type Song = Vec<MusicEvent>;
 
 
-fn is_key_release_event(data: &MidiMessage) -> bool {
+fn is_key_release_event(data: &[u8]) -> bool {
     (data.len() == 3) &&
     (((data[0] & 0xF0) == 0x80) || (((data[0] & 0xF0) == 0x90) && (data[2] == 0x90)))
 }
 
-fn is_key_down_event(data: &MidiMessage) -> bool {
+fn is_key_down_event(data: &[u8]) -> bool {
     (data.len() == 3) && ((data[0] & 0xF0) == 0x90) && (data[2] != 0x00)
+}
+
+fn get_variable_data_length(message_stream: &[u8]) -> usize {
+    let max_res = message_stream.len();
+
+    let mut array_size : usize = 0;
+    let mut nb_read = 0;
+
+    for c in message_stream.iter() {
+        nb_read += 1;
+        array_size = (array_size << 7) + (c & 0x7F) as usize;
+        if (c & 0x80) == 0  {
+            return std::cmp::min(max_res, array_size + nb_read);
+        }
+    }
+
+    // at this point input is invalid
+    return max_res;
+}
+
+
+fn get_next_event_size(message_stream: &[u8]) -> usize {
+    let len = message_stream.len();
+
+    if len < 2 {
+        // minimal possible length (midi channel event 0xC0 and 0xD0
+        return len;
+    }
+
+    let mut res = 1;  // the first byte which the event type (channel, meta, sysex)
+    let ev_type = message_stream[0];
+    if ev_type == 0xFF {
+        // META event has one byte more than sysex
+        res += 1;
+    }
+
+    if (ev_type == 0xFF) || (ev_type == 0xF0) || (ev_type == 0xF7) {
+        // end of META or sysex
+        res += get_variable_data_length(&message_stream[res..]);
+
+        // sanity check: in case of wrong input, simply discard data
+        return std::cmp::min(res, len);
+    }
+
+    if ((ev_type & 0xF0) >= 0x80) && ((ev_type & 0xF0) != 0xF0) {
+        if ((ev_type & 0xF0) == 0xC0)
+	    || ((ev_type & 0xF0) == 0xD0)  /* Program Change Event */
+        { /* or Channel Aftertouch Event */
+             // one more byte
+             res += 1;
+        } else {
+            // this is a MIDI channel event (more two bytes)
+            res += 2;
+        }
+
+        return std::cmp::min(res, len);
+    }
+
+    // at this point there is an error, discard data
+    return len;
+}
+
+pub fn midi_to_music_events(message_stream: &[u8]) -> MusicEvent {
+
+    let mut res = MusicEvent{ midi_messages: Vec::<MidiMessage>::new(),
+                              time_in_ns: 0,
+                              key_events: Vec::<KeyData>::new() };
+
+    let size = message_stream.len();
+    let mut nb_read = 0;
+
+    while nb_read < size {
+        let this_event_size = get_next_event_size(&message_stream[nb_read .. ]);
+        if this_event_size == 0 {
+            // this is an error. return what we have found so far to avoid
+            // an infinite loop. This can happen with variable length array.
+            // If the computation of the size overflow and falls to 0, then
+            // ...
+            return res;
+        }
+
+        if this_event_size == 3 { // can it be a midi key press or key release event?
+            let tmp = &message_stream[nb_read .. nb_read + 3];
+
+            let pitch = tmp[1];
+            if (pitch >= LA_0) && (pitch <= DO_8) {
+
+                if is_key_release_event(&tmp) {
+	            res.key_events.push(KeyData::Released(pitch));
+                }
+                else if is_key_down_event(&tmp) {
+	            res.key_events.push(KeyData::Pressed(pitch));
+                }
+
+                res.midi_messages.push(tmp.to_vec());
+            }
+        }
+
+        nb_read += this_event_size;
+    }
+
+    return res;
 }
 
 // in case there is a release pitch and a play pitch at the same time

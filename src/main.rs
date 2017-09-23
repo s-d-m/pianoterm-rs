@@ -96,6 +96,22 @@ fn main() {
         }
         None => {
             println!("listening to input port for midi events");
+            let input_midi_port = match options.value_of(input_midi_port_option_name) {
+                Some(value) => match u32::from_str(value) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        println!("Error: invalid input port given.{}\n. Below is the list of possible input ports", e.description());
+                        ports_printer::print_inputs();
+                        std::process::exit(2)
+                    }
+                },
+                None => {
+                    println!("Error should select either an input port or a midi file");
+                    std::process::exit(2);
+                },
+            };
+
+            music_player::play_midi_input(input_midi_port, port);
         }
     }
 }

@@ -91,15 +91,13 @@ impl KeysColor
     }
 
     fn set_color_(&mut self, pitch: u8, normal_key_color: rustbox::Color, diese_key_color: rustbox::Color) {
-        let do_8_value = 24 + 12 * 7;
-
         match pitch {
-            21 => self.la_0_color = normal_key_color.as_16color() as u8,
-            22 => self.la_diese_0_color = diese_key_color.as_16color() as u8,
-            23 => self.si_0_color = normal_key_color.as_16color() as u8,
-            p if (p >= 24) && (p < do_8_value) => {
-                let octave_number = ((p - 24) / 12) as usize;
-                let key_pos = (p - 24) % 12;
+            utils::LA_0 => self.la_0_color = normal_key_color.as_16color() as u8,
+            utils::LA_DIESE_0 => self.la_diese_0_color = diese_key_color.as_16color() as u8,
+            utils::SI_0 => self.si_0_color = normal_key_color.as_16color() as u8,
+            p if (p >= utils::DO_1) && (p < utils::DO_8) => {
+                let octave_number = ((p - utils::DO_1) / 12) as usize;
+                let key_pos = (p - utils::DO_1) % 12;
                 match key_pos {
                     0 => self.octaves[octave_number].do_color = normal_key_color.as_16color() as u8,
                     1 => self.octaves[octave_number].do_diese_color = diese_key_color.as_16color() as u8,
@@ -113,11 +111,11 @@ impl KeysColor
                     9 => self.octaves[octave_number].la_color = normal_key_color.as_16color() as u8,
                     10 => self.octaves[octave_number].la_diese_color = diese_key_color.as_16color() as u8,
                     11 => self.octaves[octave_number].si_color = normal_key_color.as_16color() as u8,
-                    e => panic!("invalid pitch for keyboard set: values should be between 21 (la_0) and {} (do_8), but got {}", do_8_value, e),
+                    e => panic!("invalid pitch for keyboard set: values should be between {} (la_0) and {} (do_8), but got {}", utils::LA_0, utils::DO_8, e),
                 }
             },
-            x if x == do_8_value => self.do_8_color = normal_key_color.as_16color() as u8,
-            e => panic!("invalid pitch for keyboard set: values should be between 21 (la_0) and {} (do_8), but got {}", do_8_value, e),
+            x if x == utils::DO_8 => self.do_8_color = normal_key_color.as_16color() as u8,
+            e => panic!("invalid pitch for keyboard set: values should be between {} (la_0) and {} (do_8), but got {}", utils::LA_0, utils::DO_8, e),
 
         }
     }
@@ -181,9 +179,9 @@ fn draw_keyboard(ui: &RustBox, keyboard: &KeysColor, pos_x: usize, pos_y: usize)
 
 }
 
-fn play_music(midi_out: &mut midir::MidiOutputConnection, event: &utils::MusicEvent)
+fn play_music(midi_out: &mut midir::MidiOutputConnection, event: &[utils::MidiMessage])
 {
-    for message in &event.midi_messages {
+    for message in event.iter() {
         if let Err(e) = midi_out.send(&message) {
             println!("Error occured while playing some event: {}", e.description());
             if let Some(e) = e.cause() {
@@ -203,7 +201,7 @@ fn init_ref_pos(width: usize, height: usize) -> (usize, usize) {
     (ref_x, ref_y)
 }
 
-fn update_keyboard(keyboard: &mut KeysColor, key_events: &Vec<KeyData>) {
+fn update_keyboard(keyboard: &mut KeysColor, key_events: &[KeyData]) {
     for k_ev in key_events {
         match *k_ev {
             KeyData::Pressed(pitch) => keyboard.set_color(pitch),
@@ -255,7 +253,7 @@ pub fn play(song: utils::Song, midi_output_port: u32) {
         let current_event = &song[i];
         update_keyboard(&mut keyboard, &current_event.key_events);
         update_screen(&ui, &keyboard, x, y);
-        play_music(&mut conn_out, current_event);
+        play_music(&mut conn_out, &current_event.midi_messages);
 
         if i != nb_events - 1 {
             let time_to_wait = song[i + 1].time_in_ns - current_event.time_in_ns;
@@ -324,5 +322,99 @@ pub fn play(song: utils::Song, midi_output_port: u32) {
 
             }
         }
+    }
+}
+
+pub fn play_midi_input(midi_input_port: u32, midi_output_port: u32) {
+
+    let midi_out = midir::MidiOutput::new("Midi output from pianoterm-rs");
+    if let Err(e) = midi_out {
+        println!("Error occured while initialising the midi output: {}", e.description());
+        return ();
+    }
+
+    let midi_out = midi_out.unwrap();
+    let conn_out = midi_out.connect(midi_output_port, "output midi port from pianoterm-rs");
+
+    if let Err(e) = conn_out {
+        println!("Failed to open midi output port: {}", e.kind().description());
+        return ();
+    }
+
+    let mut conn_out = conn_out.unwrap();
+
+
+    let ui = RustBox::init(Default::default());
+    if let Err(e) = ui {
+        println!("Failed to initialise the user interface (rustbox): {}", e.description());
+        return ();
+    };
+
+    let ui = ui.unwrap();
+    let (mut x, mut y) = init_ref_pos(ui.width(), ui.height());
+
+    let mut keyboard = KeysColor::new();
+    update_screen(&ui, &keyboard, x, y);
+
+    let midi_in = midir::MidiInput::new("Midi input from pianoterm-rs");
+    if let Err(e) = midi_in {
+        println!("Error occured while initialising the midi input: {}", e.description());
+        return ();
+    }
+
+    let midi_in = midi_in.unwrap();
+
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let conn_in = midi_in.connect(midi_input_port, "input midi port from pianoterm-rs", move |_timestamp, message, _| {
+        let key_events = utils::midi_to_music_events(message);
+        tx.send(key_events).unwrap();
+    }, ());
+
+    if let Err(e) = conn_in {
+        println!("Failed to open midi input port: {}", e.kind().description());
+        return ();
+    }
+
+    loop {
+        if EXIT_REQUESTED_BY_SIGNAL.load(Ordering::Relaxed) {
+            EXIT_REQUESTED_BY_SIGNAL.store(false, Ordering::Relaxed);
+            return;
+        }
+
+        match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+            Ok(input_music) => {
+                update_keyboard(&mut keyboard, &input_music.key_events);
+                play_music(&mut conn_out, &input_music.midi_messages);
+                update_screen(&ui, &keyboard, x, y);
+            },
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => (),
+            Err(e) => {
+                println!("Failed to receive input data {}", e.description());
+                return;
+            },
+        };
+
+        match ui.peek_event(std::time::Duration::from_millis(0), false) {
+            Ok(Event::NoEvent)
+                | Ok(Event::MouseEvent(_, _, _)) => (),
+            Ok(Event::KeyEventRaw(_, _, _)) => panic!("Raw event received, whereas the raw parameter to peek_event was set to false!"),
+            Ok(Event::ResizeEvent(w, h)) => {
+                if (w < 0) || (h < 0) {
+                    panic!("new window size has negtive components. Can't happen after a successful init!");
+                }
+                let (this_x, this_y) = init_ref_pos(w as usize, h as usize);
+                x = this_x;
+                y = this_y;
+                update_screen(&ui, &keyboard, x, y);
+            },
+            Ok(Event::KeyEvent(key)) => {
+                match key {
+                    Key::Ctrl('q') => return,
+                    _ => (),
+                }
+            },
+            Err(e) => { println!("Error occured in rustbox: {}", e.description()); return (); },
+        };
     }
 }
